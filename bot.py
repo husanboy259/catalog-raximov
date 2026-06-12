@@ -23,13 +23,12 @@ from aiogram.types import (
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
 from catalog import MebelKatalog
-from config import BOT_TOKEN
+from config import ADMIN_ID, BOT_TOKEN
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ─── FSM Holatlari ───────────────────────────────────────────────────────────
-Admin_ID = 6905461427
 class YangiMebel(StatesGroup):
     rasm       = State()
     nomi       = State()
@@ -52,12 +51,23 @@ bot_instance: Bot = None
 
 # ─── Klaviaturalar ────────────────────────────────────────────────────────────
 
-def asosiy_menu() -> ReplyKeyboardMarkup:
+
+def is_admin(user_id: int | None) -> bool:
+    return bool(user_id is not None and int(user_id) == int(ADMIN_ID))
+
+
+def asosiy_menu(user_id: int | None = None) -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
-    builder.row(
-        KeyboardButton(text="➕ Mahsulot qo'shish"),
-        KeyboardButton(text="📋 Katalog"),
-    )
+    if is_admin(user_id):
+        builder.row(
+            KeyboardButton(text="➕ Mahsulot qo'shish"),
+            KeyboardButton(text="📋 Katalog"),
+        )
+    else:
+        builder.row(
+            KeyboardButton(text="📋 Katalog"),
+            KeyboardButton(text="🔍 Qidirish"),
+        )
     builder.row(
         KeyboardButton(text="🔍 Qidirish"),
         KeyboardButton(text="🗂 Kategoriya"),
@@ -79,12 +89,13 @@ def kategoriya_klaviatura() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def mahsulot_amallar(mahsulot_id: str) -> InlineKeyboardMarkup:
+def mahsulot_amallar(mahsulot_id: str, user_id: int | None = None) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="✏️ Tahrirlash",  callback_data=f"tahrir:{mahsulot_id}")
-    builder.button(text="🗑 O'chirish",   callback_data=f"ochir:{mahsulot_id}")
-    builder.button(text="🔙 Orqaga",      callback_data="katalog_bosh")
-    builder.adjust(2)
+    if is_admin(user_id):
+        builder.button(text="✏️ Tahrirlash", callback_data=f"tahrir:{mahsulot_id}")
+        builder.button(text="🗑 O'chirish", callback_data=f"ochir:{mahsulot_id}")
+    builder.button(text="🔙 Orqaga", callback_data="katalog_bosh")
+    builder.adjust(2 if is_admin(user_id) else 1)
     return builder.as_markup()
 
 
@@ -143,7 +154,7 @@ async def start_handler(message: Message, state: FSMContext):
         "👋 <b>Mebel Katalog Botiga xush kelibsiz!</b>\n\n"
         "Bu bot orqali mebel katalogini boshqarishingiz mumkin.\n"
         "Quyidagi menyudan kerakli amalni tanlang:",
-        reply_markup=asosiy_menu(),
+        reply_markup=asosiy_menu(message.from_user.id if message.from_user else None),
         parse_mode="HTML"
     )
 
@@ -158,13 +169,16 @@ async def help_handler(message: Message):
         "/tahrirlash — Mahsulot tahrirlash\n"
         "/ochirish — Mahsulot o'chirish\n\n"
         "Yoki quyidagi tugmalardan foydalaning 👇",
-        reply_markup=asosiy_menu(),
+        reply_markup=asosiy_menu(message.from_user.id if message.from_user else None),
         parse_mode="HTML"
     )
 
 # ── Yangi mahsulot ─────────────────────────────────────────────────────────────
 
 async def yangi_start(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id if message.from_user else None):
+        await message.answer("⚠️ Faqat admin mahsulot qo'sha oladi.")
+        return
     await state.clear()
     await state.set_state(YangiMebel.rasm)
     await message.answer(
@@ -219,7 +233,7 @@ async def yangi_kategoriya_cb(callback: CallbackQuery, state: FSMContext):
     if callback.data == "bekor":
         await state.clear()
         await callback.message.edit_text("❌ Qo'shish bekor qilindi.")
-        await callback.message.answer("Asosiy menyu:", reply_markup=asosiy_menu())
+        await callback.message.answer("Asosiy menyu:", reply_markup=asosiy_menu(callback.from_user.id if callback.from_user else None))
         return
 
     kat = callback.data.split(":", 1)[1]
@@ -238,7 +252,7 @@ async def yangi_kategoriya_cb(callback: CallbackQuery, state: FSMContext):
         photo=mahsulot["rasm_id"],
         caption=mahsulot_matni(mahsulot),
         parse_mode="HTML",
-        reply_markup=asosiy_menu()
+        reply_markup=asosiy_menu(callback.from_user.id if callback.from_user else None)
     )
     await callback.answer("✅ Saqlandi!")
 
@@ -249,7 +263,7 @@ async def katalog_handler(message: Message):
     if not mahsulotlar:
         await message.answer(
             "📭 Katalog bo'sh.\n\n➕ Mahsulot qo'shish uchun tugmani bosing.",
-            reply_markup=asosiy_menu()
+            reply_markup=asosiy_menu(message.from_user.id if message.from_user else None)
         )
         return
     await message.answer(
@@ -283,13 +297,13 @@ async def filter_callback(callback: CallbackQuery):
                 photo=m["rasm_id"],
                 caption=mahsulot_matni(m),
                 parse_mode="HTML",
-                reply_markup=mahsulot_amallar(m["id"])
+                reply_markup=mahsulot_amallar(m["id"], callback.from_user.id if callback.from_user else None)
             )
         except Exception:
             await callback.message.answer(
                 mahsulot_matni(m),
                 parse_mode="HTML",
-                reply_markup=mahsulot_amallar(m["id"])
+                reply_markup=mahsulot_amallar(m["id"], callback.from_user.id if callback.from_user else None)
             )
     if len(mahsulotlar) > 10:
         await callback.message.answer(f"... va yana {len(mahsulotlar)-10} ta mahsulot.")
@@ -313,13 +327,13 @@ async def qidirish_natija(message: Message, state: FSMContext):
     if not natijalar:
         await message.answer(
             f"🔍 '<b>{so_z}</b>' bo'yicha hech narsa topilmadi.",
-            reply_markup=asosiy_menu(),
+            reply_markup=asosiy_menu(message.from_user.id if message.from_user else None),
             parse_mode="HTML"
         )
         return
     await message.answer(
         f"🔍 '{so_z}' bo'yicha <b>{len(natijalar)}</b> ta natija:",
-        reply_markup=asosiy_menu(),
+        reply_markup=asosiy_menu(message.from_user.id if message.from_user else None),
         parse_mode="HTML"
     )
     for m in natijalar:
@@ -328,18 +342,21 @@ async def qidirish_natija(message: Message, state: FSMContext):
                 photo=m["rasm_id"],
                 caption=mahsulot_matni(m),
                 parse_mode="HTML",
-                reply_markup=mahsulot_amallar(m["id"])
+                reply_markup=mahsulot_amallar(m["id"], message.from_user.id if message.from_user else None)
             )
         except Exception:
             await message.answer(
                 mahsulot_matni(m),
                 parse_mode="HTML",
-                reply_markup=mahsulot_amallar(m["id"])
+                reply_markup=mahsulot_amallar(m["id"], message.from_user.id if message.from_user else None)
             )
 
 # ── Tahrirlash ─────────────────────────────────────────────────────────────────
 
 async def tahrirlash_start(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id if message.from_user else None):
+        await message.answer("⚠️ Faqat admin mahsulotni tahrirlay oladi.")
+        return
     await state.set_state(TahrirlashHolat.id_kirish)
     await message.answer(
         "✏️ <b>Tahrirlash</b>\n\nMahsulot ID sini kiriting (misol: DAM-0001):",
@@ -349,6 +366,9 @@ async def tahrirlash_start(message: Message, state: FSMContext):
 
 
 async def tahrirlash_id(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id if message.from_user else None):
+        await message.answer("⚠️ Faqat admin mahsulotni tahrirlay oladi.")
+        return
     mid = message.text.strip().upper()
     m = katalog.id_boyicha(mid)
     if not m:
@@ -364,10 +384,13 @@ async def tahrirlash_id(message: Message, state: FSMContext):
 
 
 async def tahrirlash_maydon_cb(callback: CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id if callback.from_user else None):
+        await callback.answer("⚠️ Faqat admin uchun.", show_alert=True)
+        return
     if callback.data == "bekor":
         await state.clear()
         await callback.message.edit_text("❌ Tahrirlash bekor qilindi.")
-        await callback.message.answer("Asosiy menyu:", reply_markup=asosiy_menu())
+        await callback.message.answer("Asosiy menyu:", reply_markup=asosiy_menu(callback.from_user.id if callback.from_user else None))
         return
 
     _, mid, maydon = callback.data.split(":")
@@ -388,6 +411,9 @@ async def tahrirlash_maydon_cb(callback: CallbackQuery, state: FSMContext):
 
 
 async def tahrirlash_qiymat(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id if message.from_user else None):
+        await message.answer("⚠️ Faqat admin mahsulotni o'zgartira oladi.")
+        return
     data = await state.get_data()
     mid = data["mahsulot_id"]
     maydon = data["maydon"]
@@ -411,12 +437,15 @@ async def tahrirlash_qiymat(message: Message, state: FSMContext):
     m = katalog.id_boyicha(mid)
     await message.answer(
         f"✅ <b>{m['nomi']}</b> muvaffaqiyatli yangilandi!",
-        reply_markup=asosiy_menu(),
+        reply_markup=asosiy_menu(message.from_user.id if message.from_user else None),
         parse_mode="HTML"
     )
 
 
 async def tahrirlash_kategoriya_cb(callback: CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id if callback.from_user else None):
+        await callback.answer("⚠️ Faqat admin uchun.", show_alert=True)
+        return
     current = await state.get_state()
     if current != TahrirlashHolat.qiymat:
         return
@@ -427,19 +456,22 @@ async def tahrirlash_kategoriya_cb(callback: CallbackQuery, state: FSMContext):
     if callback.data == "bekor":
         await state.clear()
         await callback.message.edit_text("❌ Tahrirlash bekor qilindi.")
-        await callback.message.answer("Asosiy menyu:", reply_markup=asosiy_menu())
+        await callback.message.answer("Asosiy menyu:", reply_markup=asosiy_menu(callback.from_user.id if callback.from_user else None))
         return
 
     kat = callback.data.split(":", 1)[1]
     katalog.tahrirlash(data["mahsulot_id"], "kategoriya", kat)
     await state.clear()
     await callback.message.edit_text(f"✅ Kategoriya <b>{kat}</b> ga o'zgartirildi!", parse_mode="HTML")
-    await callback.message.answer("Asosiy menyu:", reply_markup=asosiy_menu())
+    await callback.message.answer("Asosiy menyu:", reply_markup=asosiy_menu(callback.from_user.id if callback.from_user else None))
     await callback.answer()
 
 # ── O'chirish ──────────────────────────────────────────────────────────────────
 
 async def ochirish_callback(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id if callback.from_user else None):
+        await callback.answer("⚠️ Faqat admin o'chira oladi.", show_alert=True)
+        return
     mid = callback.data.split(":", 1)[1]
     m = katalog.id_boyicha(mid)
     if not m:
@@ -460,6 +492,9 @@ async def ochirish_callback(callback: CallbackQuery):
 
 
 async def tasdiqlash_ochirish(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id if callback.from_user else None):
+        await callback.answer("⚠️ Faqat admin o'chira oladi.", show_alert=True)
+        return
     mid = callback.data.split(":", 1)[1]
     m = katalog.id_boyicha(mid)
     if katalog.ochir(mid):
@@ -469,7 +504,7 @@ async def tasdiqlash_ochirish(callback: CallbackQuery):
         )
     else:
         await callback.message.edit_text("⚠️ O'chirishda xatolik yuz berdi.")
-    await callback.message.answer("Asosiy menyu:", reply_markup=asosiy_menu())
+    await callback.message.answer("Asosiy menyu:", reply_markup=asosiy_menu(callback.from_user.id if callback.from_user else None))
     await callback.answer()
 
 # ── Statistika ────────────────────────────────────────────────────────────────
@@ -497,7 +532,7 @@ async def statistika_handler(message: Message):
     else:
         matn += "  Ma'lumot yo'q"
 
-    await message.answer(matn, reply_markup=asosiy_menu(), parse_mode="HTML")
+    await message.answer(matn, reply_markup=asosiy_menu(message.from_user.id if message.from_user else None), parse_mode="HTML")
 
 # ── Narx bo'yicha saralash ────────────────────────────────────────────────────
 
@@ -528,13 +563,13 @@ async def narx_callback(callback: CallbackQuery):
                 photo=m["rasm_id"],
                 caption=mahsulot_matni(m),
                 parse_mode="HTML",
-                reply_markup=mahsulot_amallar(m["id"])
+                reply_markup=mahsulot_amallar(m["id"], callback.from_user.id if callback.from_user else None)
             )
         except Exception:
             await callback.message.answer(
                 mahsulot_matni(m),
                 parse_mode="HTML",
-                reply_markup=mahsulot_amallar(m["id"])
+                reply_markup=mahsulot_amallar(m["id"], callback.from_user.id if callback.from_user else None)
             )
     await callback.answer()
 
@@ -542,12 +577,12 @@ async def narx_callback(callback: CallbackQuery):
 async def bekor_callback(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.edit_text("❌ Amal bekor qilindi.")
-    await callback.message.answer("Asosiy menyu:", reply_markup=asosiy_menu())
+    await callback.message.answer("Asosiy menyu:", reply_markup=asosiy_menu(callback.from_user.id if callback.from_user else None))
     await callback.answer()
 
 
 async def katalog_bosh_callback(callback: CallbackQuery):
-    await callback.message.answer("Asosiy menyu:", reply_markup=asosiy_menu())
+    await callback.message.answer("Asosiy menyu:", reply_markup=asosiy_menu(callback.from_user.id if callback.from_user else None))
     await callback.answer()
 
 # ─── Dispatcher sozlash ───────────────────────────────────────────────────────
@@ -608,6 +643,9 @@ def setup_handlers(dp: Dispatcher):
 
     # Tahrirlash callback (alohida handler)
     async def tahrir_callback(callback: CallbackQuery, state: FSMContext):
+        if not is_admin(callback.from_user.id if callback.from_user else None):
+            await callback.answer("⚠️ Faqat admin tahrirlay oladi.", show_alert=True)
+            return
         mid = callback.data.split(":", 1)[1]
         await state.update_data(mahsulot_id=mid)
         await state.set_state(TahrirlashHolat.maydon)

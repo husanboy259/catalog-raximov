@@ -1,0 +1,15 @@
+[Unit]
+Description=Mebel Catalog Telegram Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/root/Telegram Desktop/files
+ExecStart=/bin/bash /root/Telegram Desktop/files/start.sh
+Restart=always
+RestartSec=5
+User=root
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
