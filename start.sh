@@ -8,6 +8,10 @@ if [ ! -d .venv ]; then
 fi
 
 source .venv/bin/activate
-python -m pip install -r requirements.txt
+
+if [ ! -f .venv/.requirements-installed ] || ! cmp -s requirements.txt .venv/.requirements-installed; then
+  python -m pip install -r requirements.txt
+  cp requirements.txt .venv/.requirements-installed
+fi
 
 exec python bot.py
