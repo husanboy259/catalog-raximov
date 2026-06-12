@@ -12,9 +12,7 @@ DATA_FILE = "katalog.json"
 
 class MebelKatalog:
     kategoriyalar = [
-        "Divan", "Kreslo", "Burchak mebel", "Stol", "Stul", "Shkaf",
-        "Krovat", "Komod", "Oshxona mebellari",
-        "Ofis mebellari", "Boshqa"
+        "Divan", "Kreslo", "Burchak mebel"
     ]
 
     def __init__(self):
