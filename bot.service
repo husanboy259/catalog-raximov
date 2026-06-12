@@ -4,8 +4,8 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-WorkingDirectory=/root/Telegram Desktop/files
-ExecStart=/bin/bash /root/Telegram Desktop/files/start.sh
+WorkingDirectory=/opt/catalog-raximov
+ExecStart=/bin/bash /opt/catalog-raximov/start.sh
 Restart=always
 RestartSec=5
 User=root
