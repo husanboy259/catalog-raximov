@@ -12,7 +12,7 @@ DATA_FILE = "katalog.json"
 
 class MebelKatalog:
     kategoriyalar = [
-        "Divan", "Kreslo", "Stol", "Stul", "Shkaf",
+        "Divan", "Kreslo", "Burchak mebel", "Stol", "Stul", "Shkaf",
         "Krovat", "Komod", "Oshxona mebellari",
         "Ofis mebellari", "Boshqa"
     ]
